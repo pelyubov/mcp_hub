@@ -38,7 +38,7 @@ except Exception:
 
 
 #knowledge base
-def add_text_to_qdrant(text, title, client=qdrant_client, collection_name=COLLECTION_NAME):
+def add_text_to_qdrant(text, title, source, client=qdrant_client, collection_name=COLLECTION_NAME):
     try:
         embedding = embed_model.encode(text)
         point_id = str(uuid.uuid4())
@@ -50,7 +50,8 @@ def add_text_to_qdrant(text, title, client=qdrant_client, collection_name=COLLEC
                     vector=embedding.tolist(),
                     payload={
                         "text": text,
-                        "title": title
+                        "title": title,
+                        "source": source
                     }
                 )
             ]
@@ -75,6 +76,7 @@ def search_similar_texts(query_text: str, limit: int, client=qdrant_client, coll
                 results.append({
                     "text": result.payload["text"],
                     "title": result.payload["title"],
+                    "source": result.payload["source"],
                     "score": result.score,
                     "id": result.id
                 })
@@ -90,3 +92,23 @@ def delete_collection(client=qdrant_client, collection_name=COLLECTION_NAME):
         print(f"Collection '{collection_name}' deleted")
     except Exception as e:
         print(f"Error in delete_collection: {e}")
+
+
+def delete_data_in_collection(collection_name=COLLECTION_NAME, client=qdrant_client):
+    try:
+        client.delete(
+            collection_name=collection_name,
+            points_selector=FilterSelector(
+                filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="text",
+                            range=Range(gte="0")
+                        )
+                    ]
+                )
+            )
+        )
+        print(f"Data in collection '{collection_name}' deleted")
+    except Exception as e:
+        print(f"Error in delete_data_in_collection: {e}")

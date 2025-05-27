@@ -14,7 +14,7 @@ def search_google(query: str, num_results: int = 10, region: str = "vn", start_n
     """Search Google and return the results."""
     results = []
     while len(results) < num_results:
-        for result in search(query, num_results=num_results, unique=True, region=region, start_num=start_num):
+        for result in search(query, num=num_results, country=region, start=start_num):
             if link_filter_fn is None or link_filter_fn(result):
                 if len(results) >= num_results:
                     break

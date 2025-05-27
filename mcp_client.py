@@ -16,10 +16,10 @@ from mcp.client.stdio import stdio_client
 SYSTEM_PROMPT = """Use search tool to find information on the web then summarize the information found related to the question in form of a short paragraph."""
 
 class GeminiClient(genai.Client):
-    """Custom Gemini client to handle API requests."""
+    
 
     def __init__(self, api_key: str, tools: list = None):
-        super().__init__(api_key)
+        super().__init__(api_key=api_key)
         self.tools = tools or []
 
     def response(self, prompt: str, model: str = "gemini-2.0-flash") -> str:
@@ -31,12 +31,12 @@ class GeminiClient(genai.Client):
                 tools=self.tools,
             ),
             contents=prompt
-        ).text 
+        )
 
 # Create server parameters for stdio connection
 server_params = StdioServerParameters(
     command="python",  # Executable
-    args=["main.py"],  # Optional command line arguments
+    args=["mcp_server.py"],  # Optional command line arguments
     env=None,  # Optional environment variables
 )
 
@@ -60,7 +60,6 @@ async def run():
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(
             read, write
-            # , sampling_callback=handle_sampling_message
         ) as session:
         
             prompt = "Tìm hiểu về định luật Newton"
@@ -68,9 +67,8 @@ async def run():
 
             mcp_tools = await session.list_tools()
 
-            print("Available tools:", tools)
             tools = [
-                types.Tool(
+                Tool(
                     function_declarations=[
                         {
                             "name": tool.name,
@@ -79,7 +77,7 @@ async def run():
                                 k: v
                                 for k, v in tool.inputSchema.items()
                                 if k not in ["additionalProperties", "$schema"]
-                            },
+                            },  
                         }
                     ]
                 )
@@ -89,7 +87,7 @@ async def run():
             gemini_client = GeminiClient(api_key=GEMINI_API_KEY, tools=tools)
 
             print(gemini_client.response(prompt))
-            
+     
 
 if __name__ == "__main__":
     import asyncio

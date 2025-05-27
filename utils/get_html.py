@@ -1,39 +1,31 @@
-from typing import Callable
+import random
+import time
 
-from pydantic import BaseModel
+import requests
 
 
 def get_html_from_url(url: str) -> str:
-    """
-    Fetch HTML content from a given URL.
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/122.0.0.0 Safari/537.36"
+        )
+    }
 
-    Args:
-        url (str): The URL to fetch HTML content from.
+    time.sleep(random.uniform(1, 3))
 
-    Returns:
-        str: The HTML content as a string.
-    """
-    import requests
-
-    response = requests.get(url)
-    response.raise_for_status()  # Raise an error for bad responses
-    return response.text
-
-def paragraph_filter_fn(paragraph: str) -> bool:
-    """
-    Filter function to determine if a paragraph should be included.
-
-    Args:
-        paragraph (str): The paragraph to check.
-
-    Returns:
-        bool: True if the paragraph is not empty, False otherwise.
-    """
-    return paragraph.strip().split().__len__() > 20
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        return response.text
+    except requests.RequestException as e:
+        print(f"Request error: {e}")
+        return ""
 
 
 
-def get_title_n_paragraphs_from_html(html_content: str, paragraphs_filter_fn: Callable[[str], bool] = paragraph_filter_fn) -> tuple[str, list[str]]:
+def get_title_n_content_from_html(html_content: str) -> tuple[str, str]:
     """
     Extract paragraphs from HTML content.
 
@@ -45,12 +37,12 @@ def get_title_n_paragraphs_from_html(html_content: str, paragraphs_filter_fn: Ca
     """
     from bs4 import BeautifulSoup
 
-    soup = BeautifulSoup(markup=html_content, features="html.parser", from_encoding='utf-8')
+    soup = BeautifulSoup(markup=html_content, features="html.parser", from_encoding='utf8')
 
     title = soup.title.string if soup.title else None
-    # Find all paragraph tags
-    ps = soup.find_all('p')
+
     
-    return title, [p.get_text().strip() for p in ps if paragraphs_filter_fn(p.get_text())]
+
+    return title, soup.get_text()
 
 
