@@ -1,13 +1,11 @@
 from mcp.server.fastmcp import FastMCP
+from torch import Tensor
 
-current_dir = os.path.dirname(__file__)
-project_root = os.path.abspath(os.path.join(current_dir, ".."))
-sys.path.append(project_root)
 
-from utils.chunker import recursive_chunking
+from utils.chunking import recursive_chunking
 from utils.vector_store import (
     add_text_to_qdrant,
-    delete_collection,
+    delete_data_in_collection,
     embed_model,
     search_similar_texts,
 )
@@ -45,19 +43,24 @@ def search(query: str, limit: int = 10) -> list[str]:
         try:
             html = get_html_from_url(result)
             title, paragraphs = get_title_n_content_from_html(html)
-            if drop_content_if_title_not_matching(query, title):
+            if drop_content_if_title_not_matching(query_embedding, title):
                 continue
             for paragraph in paragraphs:
                 chunks = recursive_chunking(
-                    process_text(paragraph), embed_model.max_seq_length * 0.8, 10
+                    process_text(paragraph), int(embed_model.max_seq_length * 0.8), 10
                 )
-                [add_text_to_qdrant(chunk, title) for chunk in chunks]
-            context = search_similar_texts(query, limit)
-            return context
+                [
+                    add_text_to_qdrant(
+                        chunk, title, result if isinstance(result, str) else result
+                    )
+                    for chunk in chunks
+                ]
         except Exception as e:
             pass
             # print(f"Error processing {result}: {e}")
-            delete_collection()
+    context = search_similar_texts(query, limit)
+    delete_data_in_collection()
+    return context
 
 
 if __name__ == "__main__":

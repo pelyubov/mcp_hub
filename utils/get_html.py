@@ -24,8 +24,7 @@ def get_html_from_url(url: str) -> str:
         return ""
 
 
-
-def get_title_n_content_from_html(html_content: str) -> tuple[str, str]:
+def get_title_n_content_from_html(html_content: str) -> tuple[str | None, str]:
     """
     Extract paragraphs from HTML content.
 
@@ -37,12 +36,10 @@ def get_title_n_content_from_html(html_content: str) -> tuple[str, str]:
     """
     from bs4 import BeautifulSoup
 
-    soup = BeautifulSoup(markup=html_content, features="html.parser", from_encoding='utf8')
+    soup = BeautifulSoup(
+        markup=html_content, features="html.parser", from_encoding="utf8"
+    )
 
     title = soup.title.string if soup.title else None
 
-    
-
     return title, soup.get_text()
-
-
