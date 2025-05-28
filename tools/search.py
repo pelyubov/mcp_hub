@@ -1,14 +1,10 @@
-import os
-import sys
-
 from mcp.server.fastmcp import FastMCP
-from numpy import ndarray
 
 current_dir = os.path.dirname(__file__)
 project_root = os.path.abspath(os.path.join(current_dir, ".."))
 sys.path.append(project_root)
 
-from utils.chunking import recursive_chunking
+from utils.chunker import recursive_chunking
 from utils.vector_store import (
     add_text_to_qdrant,
     delete_collection,
@@ -20,7 +16,7 @@ mcp = FastMCP(name="SearchService")
 
 
 def drop_content_if_title_not_matching(
-    query_embed: ndarray, title: str | None, similarity_threshold: float = 0.5
+    query_embed: Tensor, title: str | None, similarity_threshold: float = 0.5
 ):
     if title is None:
         return False
@@ -38,7 +34,7 @@ def search(query: str, limit: int = 10) -> list[str]:
     """Search the web for the given query and return the results."""
     from utils import (
         get_html_from_url,
-        get_title_n_paragraphs_from_html,
+        get_title_n_content_from_html,
         process_text,
         search_google,
     )
@@ -48,7 +44,7 @@ def search(query: str, limit: int = 10) -> list[str]:
     for result in results:
         try:
             html = get_html_from_url(result)
-            title, paragraphs = get_title_n_paragraphs_from_html(html)
+            title, paragraphs = get_title_n_content_from_html(html)
             if drop_content_if_title_not_matching(query, title):
                 continue
             for paragraph in paragraphs:
@@ -61,7 +57,6 @@ def search(query: str, limit: int = 10) -> list[str]:
         except Exception as e:
             pass
             # print(f"Error processing {result}: {e}")
-        finally:
             delete_collection()
 
 

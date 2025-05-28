@@ -24,11 +24,7 @@ def search_google(
     results = []
     while len(results) < num_results:
         for result in search(
-            query,
-            num_results=num_results,
-            unique=True,
-            region=region,
-            start_num=start_num,
+            query, num_results=num_results, region=region, start_num=start_num
         ):
             if link_filter_fn is None or link_filter_fn(
                 result if isinstance(result, str) else result.url
