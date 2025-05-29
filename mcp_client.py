@@ -37,7 +37,8 @@ class GeminiClient(OpenAI):
         self,
         messages: Iterable[ChatCompletionMessageParam],
         tools: Iterable[ChatCompletionToolParam],
-        model: str = "gemini-2.0-flash",
+        # model: str = "gemini-2.0-flash",
+        model: str = "gemini-2.5-flash-preview-05-20",
     ):
         return self.chat.completions.create(
             model=model, messages=messages, tools=tools, tool_choice="auto"
@@ -120,8 +121,7 @@ class MCPClient:
             if cnt_msg := choice.message.content:
                 final_text.append(cnt_msg)
                 assistant_message_content.append(cnt_msg)
-
-            if tool_calls := choice.message.tool_calls:
+            elif tool_calls := choice.message.tool_calls:
                 results_tool_call = []
                 for tool_call in tool_calls:
                     tool_name = tool_call.function.name

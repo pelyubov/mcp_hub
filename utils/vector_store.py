@@ -12,11 +12,6 @@ from qdrant_client.http.models import (
 
 from utils.embed_model import EmbedModel
 
-# from utils.get_config import load_config
-#
-# config = load_config()
-
-# embed_model = SentenceTransformer(config.embedding_model_path)
 embed_model = EmbedModel()
 
 qdrant_client = QdrantClient(host="localhost", port=6333)
