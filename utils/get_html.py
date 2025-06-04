@@ -1,6 +1,3 @@
-import random
-import time
-
 import requests
 
 
@@ -12,8 +9,6 @@ def get_html_from_url(url: str) -> str:
             "Chrome/122.0.0.0 Safari/537.36"
         )
     }
-
-    time.sleep(random.uniform(1, 3))
 
     try:
         response = requests.get(url, headers=headers, timeout=10)

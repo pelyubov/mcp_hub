@@ -4,6 +4,7 @@ import sys
 current_dir = os.path.dirname(__file__)
 project_root = os.path.abspath(os.path.join(current_dir, ".."))
 sys.path.append(project_root)
+
 from mcp.server.fastmcp import FastMCP
 from torch import Tensor
 
@@ -74,4 +75,4 @@ def search(query: str, limit: int = 5) -> list[str]:
 
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    mcp.run("stdio")

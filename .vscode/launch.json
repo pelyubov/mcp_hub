@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "mcp_client.py",
             "console": "integratedTerminal",
-            "args": "tools/weather.py",
+            "args": "tools/weather.py tools/dummy.py tools/summarize_web_content.py tools/search.py",
         },
     ]
 }

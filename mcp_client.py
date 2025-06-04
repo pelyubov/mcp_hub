@@ -1,21 +1,19 @@
 import asyncio
 import json
-from typing import Iterable, Optional
+import os
 from contextlib import AsyncExitStack
+from typing import Any, Iterable
 
+from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters, stdio_client
-from mcp.client.stdio import stdio_client
-
+from mcp.types import CallToolResult
 from openai import OpenAI
-
 from openai.types.chat import (
     ChatCompletionMessageParam,
     ChatCompletionToolParam,
 )
+from openai.types.chat.chat_completion import Choice
 from openai.types.shared_params import FunctionDefinition
-from dotenv import load_dotenv
-
-import os
 
 load_dotenv()  # load environment variables from .env
 
@@ -26,7 +24,6 @@ SYSTEM_PROMPT = """Use search tool to find information on the web then summarize
 
 
 class GeminiClient(OpenAI):
-
     def __init__(self, api_key: str):
         super().__init__(
             api_key=api_key,
@@ -36,106 +33,136 @@ class GeminiClient(OpenAI):
     def response(
         self,
         messages: Iterable[ChatCompletionMessageParam],
-        tools: Iterable[ChatCompletionToolParam],
+        tools: Iterable[ChatCompletionToolParam] = [],
         # model: str = "gemini-2.0-flash",
         model: str = "gemini-2.5-flash-preview-05-20",
+        temperature: int = 0,
     ):
         return self.chat.completions.create(
-            model=model, messages=messages, tools=tools, tool_choice="auto"
+            model=model,
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+            temperature=temperature,
         )
 
 
 class MCPClient:
     def __init__(self):
         # Initialize session and client objects
-        self.session: Optional[ClientSession] = None
+        self.sessions: list[ClientSession] = []
         self.exit_stack = AsyncExitStack()
-        self.gem = GeminiClient(GEMINI_API_KEY)
+        self.gem = GeminiClient(GEMINI_API_KEY)  # type: ignore
 
     # methods will go here
+    async def connect_to_servers(self, servers_script_paths: list[str]):
+        for servers_script_path in servers_script_paths:
+            await self.connect_to_server(servers_script_path)
 
-    async def connect_to_server(self, server_script_path: str):
+    async def connect_to_server(self, servers_script_path: str):
         """Connect to an MCP server
 
         Args:
             server_script_path: Path to the server script (.py or .js)
         """
-        is_python = server_script_path.endswith(".py")
-        is_js = server_script_path.endswith(".js")
+        is_python = servers_script_path.endswith(".py")
+        is_js = servers_script_path.endswith(".js")
         if not (is_python or is_js):
             raise ValueError("Server script must be a .py or .js file")
 
         command = "python" if is_python else "node"
         server_params = StdioServerParameters(
-            command=command, args=[server_script_path], env=None
+            command=command, args=[servers_script_path], env=None
         )
 
         stdio_transport = await self.exit_stack.enter_async_context(
             stdio_client(server_params)
         )
         self.stdio, self.write = stdio_transport
-        self.session = await self.exit_stack.enter_async_context(
+
+        session = await self.exit_stack.enter_async_context(
             ClientSession(self.stdio, self.write)
         )
 
-        await self.session.initialize()
+        await session.initialize()
+
+        self.sessions.append(session)
 
         # List available tools
-        response = await self.session.list_tools()
-        tools = response.tools
-        print("\nConnected to server with tools:", [tool.name for tool in tools])
+        # response = await self.session.list_tools()
+        # tools = response.tools
+        # print("\nConnected to server with tools:", [tool.name for tool in tools])
 
     async def process_query(self, query: str) -> str:
-        assert (
-            self.session is not None
-        ), "Session must be initialized before processing a query"
+        assert self.sessions is not None, (
+            "Session must be initialized before processing a query"
+        )
         """Process a query using Claude and available tools"""
         messages: list[ChatCompletionMessageParam] = [
             {"role": "user", "content": query}
         ]
 
-        response = await self.session.list_tools()
-        available_tools: list[ChatCompletionToolParam] = [
-            ChatCompletionToolParam(
-                function=FunctionDefinition(
-                    name=tool.name,
-                    description=tool.description or "",
-                    parameters=tool.inputSchema,
-                ),
-                type="function",
+        available_tools: list[ChatCompletionToolParam] = []
+        for session in self.sessions:
+            response = await session.list_tools()
+            available_tools.extend(
+                [
+                    ChatCompletionToolParam(
+                        function=FunctionDefinition(
+                            name=tool.name,
+                            description=tool.description or "",
+                            parameters=tool.inputSchema,
+                        ),
+                        type="function",
+                    )
+                    for tool in response.tools
+                ]
             )
-            for tool in response.tools
-        ]
 
-        response = self.gem.response(messages, tools=available_tools)
+        tool_choice_res = self.gem.response(messages, tools=available_tools)
 
-        if not response:
-            return "No response from Gemini"
+        if not tool_choice_res:
+            return "No tool choice response from Gemini"
 
         # Process response and handle tool calls
-        final_text = []
+        final_text: list[str] = []
 
-        assistant_message_content = []
-        for index, choice in enumerate(response.choices):
+        assistant_message_content: list[str | Choice] = []
+        print(f"\nTool choices: {tool_choice_res.choices}. Only choosing first one.")
+        for index, choice in enumerate(tool_choice_res.choices[:1]):
             print(f"Choice {index}: {choice}")
             if cnt_msg := choice.message.content:
                 final_text.append(cnt_msg)
                 assistant_message_content.append(cnt_msg)
             elif tool_calls := choice.message.tool_calls:
-                results_tool_call = []
+                results_tool_call: list[CallToolResult] = []
                 for tool_call in tool_calls:
                     tool_name = tool_call.function.name
-                    tool_args = (
+                    tool_args: dict[str, Any] = (
                         json.loads(tool_call.function.arguments)
                         if tool_call.function.arguments
                         else {}
                     )
 
-                    assert isinstance(
-                        tool_args, dict
-                    ), f"Tool arguments must be a dictionary, got {type(tool_args)}"
+                    assert isinstance(tool_args, dict), (
+                        f"Tool arguments must be a dictionary, got {type(tool_args)}"
+                    )
                     # Execute tool call
-                    result = await self.session.call_tool(tool_name, tool_args)
+                    # TODO need to transform self.sessions to better data structure
+                    # result = await self.sessions.call_tool(tool_name, tool_args)
+                    result = None
+                    is_tool_called = False
+                    for session in self.sessions:
+                        if tool_name in [
+                            tool.name for tool in (await session.list_tools()).tools
+                        ]:
+                            result = await session.call_tool(tool_name, tool_args)
+                            is_tool_called = True
+                            break
+
+                    assert isinstance(result, CallToolResult)
+                    if not is_tool_called:
+                        raise Exception(f"Tool {tool_name} not found in sessions.")
 
                     if result.isError:
                         final_text.append(
@@ -148,22 +175,7 @@ class MCPClient:
                     )
 
                     assistant_message_content.append(choice)
-                    # messages.append(
-                    #     {"role": "assistant", "content": assistant_message_content}
-                    # )
-
-                    # Add results of tool calls to messages
-                    # messages.append(
-                    #     {
-                    #         "role": "function",
-                    #         "name": tool_name,
-                    #         "content": str(
-                    #             result
-                    #         ),  # CONSIDER change to better structure
-                    #     }
-                    # )
-                    # BUG does GEMINI not have "function" role?
-
+                    final_text.append("Result tool call: " + str(results_tool_call))
                     messages.append(
                         {
                             "role": "assistant",
@@ -177,8 +189,14 @@ class MCPClient:
                     )
 
         # Get next response from GEMINI
-        response_second = self.gem.response(messages=messages, tools=available_tools)
-        final_text.append(response_second.choices[0].message.content)
+        # rephase_res = self.gem.response(messages=messages, tools=available_tools)
+        print("RUN HEER 1")
+        rephase_res = self.gem.response(messages=messages)
+        print("RUN HEER 2")
+        if content := rephase_res.choices[0].message.content:
+            final_text.append(content)
+        else:
+            print("⚠️ No response from Gemini")
 
         return "\n".join(final_text)
 
@@ -191,14 +209,17 @@ class MCPClient:
             try:
                 query = input("\nQuery: ").strip()
 
-                if query.lower() == "quit":
+                if query.lower() == "quit" or query.lower() == "exit" or query == "q":
                     break
+                if not query:
+                    continue
 
                 response = await self.process_query(query)
                 print("\n" + response)  # DEBUG str(response)
+                print("-" * 50)
 
             except Exception as e:
-                print(f"\nError: {str(e)}")
+                print(f"\n❌ Error: {str(e)}")
 
     async def cleanup(self):
         """Clean up resources"""
@@ -207,12 +228,14 @@ class MCPClient:
 
 async def main():
     if len(sys.argv) < 2:
-        print("Usage: python client.py <path_to_server_script>")
+        print(
+            "Usage: python client.py <path_to_mcp_server_1_script> <path_to_mcp_server_2_script> ..."
+        )
         sys.exit(1)
 
     client = MCPClient()
     try:
-        await client.connect_to_server(sys.argv[1])
+        await client.connect_to_servers(sys.argv[1:])
         await client.chat_loop()
     finally:
         await client.cleanup()

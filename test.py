@@ -14,11 +14,7 @@ try:
         content = process_text(content)
         print(f"Processing content for title: {title}")
 
-        chunks = recursive_chunking(
-            content, 
-            int(512 * 0.8),
-            10
-        )
+        chunks = recursive_chunking(content, int(512 * 0.8), 10)
         for chunk in chunks:
             print(f"Adding chunk: {chunk[:50]}...")
             print("-" * 50)
@@ -28,3 +24,10 @@ try:
 except Exception as e:
     print(f"An error occurred during the search: {e}")
 
+# import os
+# import sys
+#
+# current_dir = os.path.dirname(__file__)
+# project_root = os.path.abspath(os.path.join(current_dir, ".."))
+# sys.path.append(project_root)
+# uv run mcp_client.py tools/weather.py tools/summarize_web_content.py tools/search.py
